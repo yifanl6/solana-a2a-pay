@@ -19,6 +19,7 @@ let runTimes: number[] = [];
 let lastRun: (RunResult & { at: string }) | null = null;
 
 const app = express();
+app.get('/healthz', (_req, res) => res.send('ok')); // cheap target for uptime pings
 app.get('/', (_req, res) => res.type('html').send(fs.readFileSync(HTML_PATH, 'utf8')));
 
 // Public passthrough to the agents, so external x402 clients can pay them through this one URL:

@@ -1,4 +1,4 @@
-# a2a-pay: agents paying agents, per request
+# Streamline: agents paying agents, per request
 
 Three AI-style agents pay each other per HTTP request using an [x402](https://x402.org)-style `402 Payment Required` flow with a test stablecoin. There are two implementations: **Monad** (EVM, live on testnet) and **Solana**.
 

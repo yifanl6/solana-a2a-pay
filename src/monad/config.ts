@@ -13,8 +13,8 @@ export const EXPLORER = chain.blockExplorers!.default.url;
 export const txUrl = (hash: string) => `${EXPLORER}/tx/${hash}`;
 export const addressUrl = (a: string) => `${EXPLORER}/address/${a}`;
 
-export const DATA_AGENT_PORT = Number(process.env.PORT ?? process.env.DATA_AGENT_PORT ?? 4101);
-export const ANALYST_PORT = Number(process.env.PORT ?? process.env.ANALYST_PORT ?? 4102);
+export const DATA_AGENT_PORT = Number(process.env.DATA_AGENT_PORT ?? process.env.PORT ?? 4101);
+export const ANALYST_PORT = Number(process.env.ANALYST_PORT ?? process.env.PORT ?? 4102);
 export const DATA_AGENT_URL = process.env.DATA_AGENT_URL ?? 'http://localhost:4101';
 export const ANALYST_URL = process.env.ANALYST_URL ?? 'http://localhost:4102';
 

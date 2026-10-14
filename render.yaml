@@ -1,0 +1,24 @@
+# Render Blueprint: the whole Monad stack (data agent, analyst agent, dashboard) as one free web service.
+# Deploy: https://render.com/deploy?repo=https://github.com/yifanl6/solana-a2a-pay
+services:
+  - type: web
+    name: streamline
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: AGENT
+        value: all
+      - key: MONAD_NETWORK
+        value: monad-testnet
+      # Wallet keys: paste from .wallets/monad-testnet/<role>.key when Render asks.
+      - key: ORCHESTRATOR_PRIVATE_KEY
+        sync: false
+      - key: ANALYST_PRIVATE_KEY
+        sync: false
+      - key: DATA_PRIVATE_KEY
+        sync: false
