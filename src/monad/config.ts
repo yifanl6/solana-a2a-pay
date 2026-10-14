@@ -42,9 +42,23 @@ export function saveKey(role: MonadRole, key: Hex): void {
 }
 
 export function loadAccount(role: MonadRole): PrivateKeyAccount {
-  const key = envKey(role) ?? (fs.existsSync(keyPath(role)) ? (fs.readFileSync(keyPath(role), 'utf8').trim() as Hex) : undefined);
-  if (!key) throw new Error(`no key for ${role}: set ${role.toUpperCase()}_PRIVATE_KEY or run \`npm run monad:setup\``);
-  return privateKeyToAccount(key);
+  const name = `${role.toUpperCase()}_PRIVATE_KEY`;
+  const raw = envKey(role) ?? (fs.existsSync(keyPath(role)) ? fs.readFileSync(keyPath(role), 'utf8') : undefined);
+  if (!raw?.trim()) throw new Error(`no key for ${role}: set ${name} or run \`npm run monad:setup\``);
+
+  // Tolerate copy-paste damage from dashboards: whitespace, quotes, a missing 0x prefix.
+  const hex = raw.trim().replace(/^["']|["']$/g, '').trim().replace(/^0x/i, '');
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error(`${name} is not a private key: expected 64 hex characters (optionally 0x-prefixed), got ${hex.length} characters`);
+  }
+  const account = privateKeyToAccount(`0x${hex}`);
+
+  // Catch swapped keys: each role's key must control the wallet recorded in the deployment.
+  const expected = deploymentExists() ? loadDeployment().agents[role] : undefined;
+  if (expected && expected.toLowerCase() !== account.address.toLowerCase()) {
+    throw new Error(`${name} controls ${account.address}, but the ${role} wallet is ${expected}. Check that the keys weren't swapped.`);
+  }
+  return account;
 }
 
 // Public deployment record, committed to the repo so hosted agents and judges can find the token.
