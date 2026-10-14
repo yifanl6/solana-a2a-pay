@@ -1,0 +1,5 @@
+node_modules/
+.wallets/
+test-ledger/
+*.log
+.DS_Store
