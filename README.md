@@ -1,13 +1,79 @@
-# solana-a2a-pay
+# a2a-pay: agents paying agents, per request
 
-Three AI-style agents pay each other per HTTP request on Solana, using an [x402](https://x402.org)-style `402 Payment Required` flow with a test stablecoin.
+Three AI-style agents pay each other per HTTP request using an [x402](https://x402.org)-style `402 Payment Required` flow with a test stablecoin. There are two implementations: **Monad** (EVM, live on testnet) and **Solana**.
 
 ```
-orchestrator ──$0.02/call──▶ analyst-agent ──$0.005/call──▶ data-agent ──▶ Solana RPC
+orchestrator ──$0.02/call──▶ analyst-agent ──$0.005/call──▶ data-agent ──▶ chain RPC
  (buyer, hard budget)        (seller AND buyer)             (seller)
 ```
 
-The analyst is the interesting node. It earns from the orchestrator and spends on the data agent within the same request. It also returns the upstream payment signature as **provenance**, and the orchestrator checks on-chain that the data agent really received $0.005 in that transaction.
+The analyst is the interesting node. It earns from the orchestrator and spends on the data agent within the same request. It also returns the upstream payment transaction as **provenance**, and the orchestrator checks on-chain that the data agent really received $0.005 in that transaction.
+
+# Monad (live on testnet)
+
+| | |
+|---|---|
+| Network | Monad testnet, chain 10143 |
+| Test stablecoin (tUSDC, EIP-3009) | [`0x0f1a488c1bd726Ae27116336Ce5E869B15491AaA`](https://testnet.monadexplorer.com/address/0x0f1a488c1bd726Ae27116336Ce5E869B15491AaA) |
+| Analyst agent (seller + buyer) | [`0xDC250fC2606f08E5d170c9532B4A748528C304c8`](https://testnet.monadexplorer.com/address/0xDC250fC2606f08E5d170c9532B4A748528C304c8) |
+| Data agent (seller) | [`0xD8aC58a53e10220012e8e44Cae4090611e6f25C6`](https://testnet.monadexplorer.com/address/0xD8aC58a53e10220012e8e44Cae4090611e6f25C6) |
+| Orchestrator (buyer) | [`0x6f5E91062df02A53f6cf9EA9b8C80545aCEC11FB`](https://testnet.monadexplorer.com/address/0x6f5E91062df02A53f6cf9EA9b8C80545aCEC11FB) |
+
+The full record is in [`deployments/monad-testnet.json`](deployments/monad-testnet.json). The agents' transaction histories on the explorer show every settled payment.
+
+## How a payment works on Monad (x402 "exact" scheme, EVM)
+
+1. The client calls `GET /risk/:address`. The server replies `402` with the price, token, `payTo`, the token's EIP-712 domain, and a single-use **seller-issued nonce**.
+2. The client checks its spend policy (token, per-call cap, total budget, payee allow-list). It then signs an **EIP-3009 `TransferWithAuthorization`** for exactly that price, using the seller's nonce, and retries with an `X-PAYMENT` header. **The buyer never needs MON.**
+3. The server verifies the authorization, burns the nonce, and **simulates** `transferWithAuthorization`. It then submits the call itself, paying gas, waits for the receipt, and serves the response with an `X-PAYMENT-RESPONSE` receipt.
+
+## Run it
+
+```bash
+npm install
+npm run monad:setup        # first time only: wallets, deploy tUSDC, fund agents (prints the treasury to fund)
+npm run monad:live         # data + analyst + dashboard, plus a public Cloudflare quick-tunnel URL
+```
+
+`monad:live` prints a public `https://….trycloudflare.com` URL. **Run live demo** on that page buys three reports: two settle on Monad, and the third is refused by the orchestrator's budget. Every transaction links to the explorer. The same URL proxies the agents under `/agents/analyst/` and `/agents/data/`, so any x402 client can pay them directly. You need [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) installed (`brew install cloudflared`); set `NO_TUNNEL=1` to stay local.
+
+To run the pieces separately:
+
+```bash
+npm run monad:data-agent          # :4101
+npm run monad:analyst-agent       # :4102
+npm run monad:orchestrator        # CLI buyer; add addresses to analyze specific ones
+npm run monad:attack              # 14 adversarial checks against the live data agent
+npm run monad:web                 # dashboard on :4100
+```
+
+For mainnet, set `MONAD_NETWORK=monad` and run `monad:setup` with a funded treasury. To host anywhere, run `npm start` with `AGENT=data|analyst|web`, `PORT`, `<ROLE>_PRIVATE_KEY`, `DATA_AGENT_URL`, and `ANALYST_URL`.
+
+## Security model (Monad)
+
+The seller submits the buyer's authorization and pays the gas, which makes it a target. `src/monad/x402.ts` and `src/monad/server.ts` reject:
+
+| Attack | Defense |
+|---|---|
+| Underpay, wrong recipient | Exact `value` and `to`, checked against the seller's own quote |
+| Pay in a worthless token, or replay a signature from another chain | EIP-712 domain (`verifyingContract`, `chainId`) is part of the signature |
+| Tamper with the amount or `from` after signing | Signature recovery must match `from` over the exact message |
+| Expired, not-yet-valid, or open-ended authorizations | Validity window: usable now, still valid long enough to land, and at most `maxTimeoutSeconds` long |
+| Gas griefing with a valid signature from an empty wallet | Simulate before submitting, so failures cost the seller nothing |
+| Forged nonce, or a quote reused on another resource | Seller-issued nonce bound to resource and price, burned before submission |
+| Replay a settled payment | Burned off-chain, and EIP-3009 `authorizationState` enforces it again on-chain |
+
+`npm run monad:attack` ran all 14 attacks against the live testnet agent, and **14 of 14 were blocked**. The seller's only balance changes were one honest payment (+$0.005) and its gas.
+
+The seller can't be drained through its own signature: it only ever calls `transferWithAuthorization` on one fixed token contract, so the buyer never chooses what the seller signs.
+
+## Economics on Monad
+
+Each settlement is one `transferWithAuthorization`. With the estimate +20% as the gas limit, that's about 118k gas, which at the testnet's ~102 gwei is about **0.012 MON per payment**. Monad charges the gas *limit*, not gas used, so the verifier keeps the limit tight. Whether $0.005 calls make sense on mainnet depends on the MON price and mainnet gas price: the fee share is `0.012 MON × price ÷ call price`. Below that break-even point you'd batch, using the same cumulative-IOU idea as the Solana Next steps below.
+
+Measured latency for a two-hop paid request (the orchestrator pays the analyst, and the analyst pays the data agent, each waiting for a receipt) was about 0.7–2s on testnet.
+
+# Solana version
 
 ## The flow (x402 "exact" scheme)
 
@@ -67,6 +133,8 @@ on-chain balance change $0.0400 ✓ matches
 | `src/x402/nonce.ts` | Single-use nonces bound to resource and price |
 | `src/agents/*.ts` | data agent, analyst agent (seller + buyer), orchestrator, toy risk heuristic |
 | `src/scripts/attack.ts` | 15 adversarial checks against a live seller |
+| `src/monad/*` | The Monad/EVM implementation: EIP-3009 verifier, paywall, client, agents, dashboard, attack suite |
+| `contracts/TestUSD.sol` | Test stablecoin with EIP-3009 and a public faucet (OpenZeppelin ERC20 + EIP712) |
 
 Each agent describes its offers at `GET /` (`curl localhost:4002/`).
 

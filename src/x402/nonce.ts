@@ -16,6 +16,8 @@ export class NonceStore {
   constructor(
     private ttlMs = 120_000,
     private maxEntries = 50_000,
+    private bytes = 16,
+    private prefix = '',
   ) {}
 
   issue(resourceKey: string, amount: bigint): string {
@@ -24,7 +26,7 @@ export class NonceStore {
       // Map iterates in insertion order, so the first key is the oldest quote.
       this.entries.delete(this.entries.keys().next().value!);
     }
-    const nonce = randomBytes(16).toString('hex');
+    const nonce = this.prefix + randomBytes(this.bytes).toString('hex');
     this.entries.set(nonce, { resourceKey, amount, expiresAt: Date.now() + this.ttlMs });
     return nonce;
   }

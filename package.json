@@ -11,18 +11,32 @@
     "orchestrator": "tsx src/agents/orchestrator.ts",
     "attack": "tsx src/scripts/attack.ts",
     "demo": "tsx src/scripts/demo.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "monad:setup": "tsx src/monad/setup.ts",
+    "monad:data-agent": "tsx src/monad/data-agent.ts",
+    "monad:analyst-agent": "tsx src/monad/analyst-agent.ts",
+    "monad:orchestrator": "tsx src/monad/orchestrator.ts",
+    "monad:attack": "tsx src/monad/attack.ts",
+    "monad:web": "tsx src/monad/web.ts",
+    "start": "tsx src/monad/start.ts",
+    "monad:live": "tsx src/monad/live.ts"
   },
   "dependencies": {
+    "@openzeppelin/contracts": "^5.6.1",
     "@solana/spl-token": "0.4.9",
     "@solana/web3.js": "1.98.0",
     "express": "4.21.2",
-    "tweetnacl": "1.0.3"
+    "tweetnacl": "1.0.3",
+    "viem": "^2.56.9",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@types/express": "4.17.21",
     "@types/node": "22.10.2",
-    "tsx": "^4.23.15",
+    "solc": "^0.8.37",
     "typescript": "5.7.2"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

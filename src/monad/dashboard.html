@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A2A Pay on Monad</title>
+<meta name="description" content="AI agents paying each other per HTTP request on Monad with x402 and EIP-3009.">
+<style>
+  :root {
+    --bg: #fbfaf8; --surface: #ffffff; --border: #e7e3dc; --text: #1d1b18; --muted: #6b665e;
+    --accent: #6e54ff; --accent-soft: #efebff; --ok: #1f8a4c; --ok-soft: #e6f4ec; --warn: #b4540a; --warn-soft: #fdf0e3;
+    --bad: #c0362c; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121117; --surface: #1b1a22; --border: #2e2c38; --text: #ecebf2; --muted: #9c98aa;
+      --accent: #9a88ff; --accent-soft: #262140; --ok: #4cc583; --ok-soft: #15291e; --warn: #f0a050; --warn-soft: #2e2113; --bad: #f07067;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 36px 0 12px; font-weight: 600; }
+  .lede { color: var(--muted); margin: 0 0 20px; max-width: 680px; }
+  .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-weight: 600; vertical-align: middle; margin-left: 8px; }
+  .mono { font-family: var(--mono); font-size: 13px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .flow { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+  .node { flex: 1 1 200px; }
+  .node b { display: block; font-size: 15px; }
+  .node span { color: var(--muted); font-size: 13px; }
+  .arrow { align-self: center; color: var(--accent); font-weight: 700; font-size: 13px; text-align: center; min-width: 70px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  input { flex: 1 1 300px; min-width: 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--mono); font-size: 13px; }
+  button { padding: 10px 18px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; }
+  button:disabled { opacity: 0.55; cursor: wait; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .results { display: grid; gap: 10px; margin-top: 16px; }
+  .result { border-left: 4px solid var(--ok); }
+  .result.refused { border-left-color: var(--warn); background: var(--warn-soft); }
+  .result.failed { border-left-color: var(--bad); }
+  .row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+  .score { font-size: 22px; font-weight: 700; }
+  .factors { margin: 6px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
+  .tick { color: var(--ok); font-weight: 600; }
+  .summary { background: var(--ok-soft); border-color: transparent; font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .scroll { overflow-x: auto; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+  .grid2 .card p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+  .dot.off { background: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Agents paying agents, per request <span class="badge" id="net">Monad</span></h1>
+  <p class="lede">Three agents trade over HTTP with x402 <code>402 Payment Required</code>. Buyers sign an EIP-3009 authorization off-chain, and sellers settle it on Monad and pay the gas. The analyst earns from the orchestrator and pays the data agent in the same request, and its report carries the upstream payment as provenance you can verify on-chain.</p>
+
+  <div class="flow">
+    <div class="card node"><b>Orchestrator</b><span>buyer · hard budget $0.05</span></div>
+    <div class="arrow">$0.02 →</div>
+    <div class="card node"><b>Analyst agent</b><span>seller and buyer · risk reports</span></div>
+    <div class="arrow">$0.005 →</div>
+    <div class="card node"><b>Data agent</b><span>seller · on-chain snapshots</span></div>
+  </div>
+
+  <h2>Live run</h2>
+  <div class="card">
+    <div class="controls">
+      <input id="addr" placeholder="Optional: a Monad address to analyze (0x…)" autocomplete="off" spellcheck="false">
+      <button id="run">Run live demo</button>
+    </div>
+    <div class="hint">Buys three reports at $0.02 each against a $0.05 budget. Two settle on-chain (four transactions across the two hops), and the third is refused by the orchestrator's own spend policy.</div>
+    <div class="results" id="results"></div>
+  </div>
+
+  <h2>Agents</h2>
+  <div class="card scroll">
+    <table>
+      <thead><tr><th>Agent</th><th>Address</th><th class="num">MON (gas)</th><th class="num">tUSDC</th></tr></thead>
+      <tbody id="agents"><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table>
+    <div class="hint" id="token"></div>
+  </div>
+
+  <h2>Recent settlements</h2>
+  <div class="card scroll">
+    <table>
+      <thead><tr><th>When</th><th>Seller</th><th>Resource</th><th class="num">Amount</th><th>Tx</th></tr></thead>
+      <tbody id="recent"><tr><td colspan="5">No payments yet.</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>Why it's safe to be the fee payer</h2>
+  <div class="grid2">
+    <div class="card"><b>Exact terms</b><p>The amount, recipient, token (EIP-712 domain), and chain are all checked against the seller's own quote, never the client's echo.</p></div>
+    <div class="card"><b>Single-use nonces</b><p>Each nonce is issued by the seller, bound to the resource and price, and burned before submission. EIP-3009 enforces it again on-chain.</p></div>
+    <div class="card"><b>Simulate first</b><p>Unfunded or invalid authorizations fail in simulation, so attackers can't make the seller burn gas.</p></div>
+    <div class="card"><b>Buyer policy</b><p>Budget, per-call cap, and payee allow-list are checked before signing. That's why the third report above gets refused.</p></div>
+  </div>
+  <p class="hint">Source: <a href="https://github.com/yifanl6/solana-a2a-pay">github.com/yifanl6/solana-a2a-pay</a></p>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let explorer = '';
+const usd = (u) => '$' + (Number(u) / 1e6).toFixed(4);
+const short = (s) => s.slice(0, 6) + '…' + s.slice(-4);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const txLink = (h) => `<a class="mono" href="${explorer}/tx/${esc(h)}" target="_blank" rel="noopener">${short(esc(h))}</a>`;
+const addrLink = (a) => `<a class="mono" href="${explorer}/address/${esc(a)}" target="_blank" rel="noopener">${short(esc(a))}</a>`;
+
+function renderResult(r) {
+  const el = document.createElement('div');
+  el.className = 'card result ' + r.outcome;
+  if (r.outcome === 'refused') {
+    el.innerHTML = `<div class="row"><b>⛔ Refused by spend policy</b><span class="mono">${addrLink(r.address)}</span></div><div class="hint">${esc(r.reason)}</div>`;
+  } else if (r.outcome === 'failed') {
+    el.innerHTML = `<div class="row"><b>✗ Failed</b><span>${addrLink(r.address)}</span></div><div class="hint">${esc(r.reason)}</div>`;
+  } else {
+    const f = r.report.factors.map((x) => `<li>${x.points >= 0 ? '+' : ''}${x.points} ${esc(x.factor)}: ${esc(x.detail)}</li>`).join('');
+    el.innerHTML = `
+      <div class="row"><span>Risk report for ${addrLink(r.address)}</span><span class="score">${r.report.score}/100 <small style="font-size:13px;color:var(--muted)">${esc(r.report.level)}</small></span></div>
+      <ul class="factors">${f}</ul>
+      <div class="row" style="margin-top:8px;font-size:13px">
+        <span>Paid ${usd(r.paid.amount)} → analyst · ${txLink(r.paid.transaction)} · ${r.ms} ms</span>
+        <span>Provenance: data agent got ${r.provenance.dataAgentReceived ? usd(r.provenance.dataAgentReceived) : '?'} in ${txLink(r.provenance.upstreamPaymentTx)}
+          ${r.provenance.verified ? '<span class="tick">✓ verified on-chain</span>' : '<span style="color:var(--bad)">✗ not verified</span>'}</span>
+      </div>
+      <div class="hint">Budget left ${usd(r.budgetLeft)}</div>`;
+  }
+  $('results').appendChild(el);
+}
+
+function renderSummary(run) {
+  const el = document.createElement('div');
+  el.className = 'card summary';
+  el.innerHTML = `Tracked spend ${usd(run.trackedSpend)} · on-chain balance change ${usd(run.onChainDelta)} ${run.matches ? '<span class="tick">✓ matches</span>' : '✗ mismatch'}`;
+  $('results').appendChild(el);
+}
+
+$('run').onclick = () => {
+  const btn = $('run');
+  btn.disabled = true; btn.textContent = 'Settling on Monad…';
+  $('results').innerHTML = '';
+  const addr = $('addr').value.trim();
+  const es = new EventSource('/api/run' + (addr ? '?address=' + encodeURIComponent(addr) : ''));
+  const finish = () => { es.close(); btn.disabled = false; btn.textContent = 'Run live demo'; refresh(); };
+  es.addEventListener('result', (e) => renderResult(JSON.parse(e.data)));
+  es.addEventListener('done', (e) => { renderSummary(JSON.parse(e.data)); finish(); });
+  es.addEventListener('fail', (e) => { $('results').innerHTML += `<div class="card result failed">${esc(JSON.parse(e.data).error)}</div>`; finish(); });
+  es.onerror = async () => {
+    es.close();
+    // Rate-limit and validation errors arrive as plain JSON, not as an event stream.
+    try {
+      const r = await fetch('/api/run' + (addr ? '?address=' + encodeURIComponent(addr) : ''));
+      if (!r.ok) $('results').innerHTML = `<div class="card result failed">${esc((await r.json()).error)}</div>`;
+    } catch {}
+    finish();
+  };
+};
+
+async function refresh() {
+  try {
+    const s = await (await fetch('/api/status')).json();
+    explorer = s.explorer;
+    $('net').textContent = s.network === 'monad' ? 'Monad mainnet' : 'Monad testnet · chain ' + s.chainId;
+    $('token').innerHTML = `Test stablecoin (tUSDC, EIP-3009): ${addrLink(s.token)}`;
+    $('agents').innerHTML = s.agents.map((a) => `<tr>
+      <td>${a.role === 'orchestrator' ? '' : `<span class="dot ${s.online[a.role] ? '' : 'off'}"></span>`}${a.url ? `<a href="${esc(a.url)}/" target="_blank" rel="noopener">${a.role}</a>` : a.role}</td>
+      <td>${addrLink(a.address)}</td><td class="num">${Number(a.mon).toFixed(3)}</td><td class="num">${usd(a.tusdc)}</td></tr>`).join('');
+    if (s.recent.length) {
+      $('recent').innerHTML = s.recent.map((p) => `<tr><td>${new Date(p.at).toLocaleTimeString()}</td><td>${p.seller}</td>
+        <td class="mono">${esc(p.resource.replace(/0x[0-9a-fA-F]{40}/, (m) => short(m)))}</td><td class="num">${usd(p.amount)}</td><td>${txLink(p.transaction)}</td></tr>`).join('');
+    }
+    if (s.lastRun && !$('results').children.length) {
+      s.lastRun.results.forEach(renderResult);
+      renderSummary(s.lastRun);
+      $('results').insertAdjacentHTML('afterbegin', `<div class="hint">Last run at ${new Date(s.lastRun.at).toLocaleString()}:</div>`);
+    }
+  } catch {}
+}
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>

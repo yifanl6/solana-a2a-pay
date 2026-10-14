@@ -1,0 +1,15 @@
+{
+  "network": "monad-testnet",
+  "chainId": 10143,
+  "token": "0x0f1a488c1bd726Ae27116336Ce5E869B15491AaA",
+  "tokenName": "Test USD Coin",
+  "tokenVersion": "1",
+  "deployTx": "0xcae485488c8f2fbc8ae152beddd8a77a5fd6f3ca363fd9d9295d59a9fa5d9750",
+  "agents": {
+    "treasury": "0x7c8B6F4e4547178b4ed444079417c01A9481A31B",
+    "orchestrator": "0x6f5E91062df02A53f6cf9EA9b8C80545aCEC11FB",
+    "analyst": "0xDC250fC2606f08E5d170c9532B4A748528C304c8",
+    "data": "0xD8aC58a53e10220012e8e44Cae4090611e6f25C6",
+    "attacker": "0x33B4b99886d642140B01af989C69a93B0e4B0c17"
+  }
+}
