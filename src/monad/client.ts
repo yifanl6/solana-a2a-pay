@@ -1,6 +1,6 @@
 import { getAddress, type Address, type Hex } from 'viem';
 import type { PrivateKeyAccount } from 'viem/accounts';
-import { chain } from './config';
+import { chain, fmtUsd } from './config';
 import { transferWithAuthorizationTypes } from './token';
 import {
   PAYMENT_HEADER,
@@ -126,9 +126,9 @@ export class X402Client {
     const amount = BigInt(req.maxAmountRequired);
 
     if (!p.allowedPayees.some((k) => getAddress(k) === getAddress(req.payTo))) throw new PolicyError(`payee ${req.payTo} is not on the allow-list`);
-    if (amount > p.maxPerCall) throw new PolicyError(`price ${amount} exceeds per-call cap ${p.maxPerCall}`);
+    if (amount > p.maxPerCall) throw new PolicyError(`price ${fmtUsd(amount)} exceeds the per-call cap of ${fmtUsd(p.maxPerCall)}`);
     if (amount > this.remaining) {
-      throw new PolicyError(`price ${amount} exceeds remaining budget ${this.remaining} (spent ${this.spent} of ${p.budget})`);
+      throw new PolicyError(`price ${fmtUsd(amount)} exceeds the remaining budget of ${fmtUsd(this.remaining)} (${fmtUsd(this.spent)} of ${fmtUsd(p.budget)} spent)`);
     }
     return req;
   }

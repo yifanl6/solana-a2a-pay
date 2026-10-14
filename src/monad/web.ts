@@ -11,7 +11,7 @@ const account = loadAccount('orchestrator');
 const PORT = Number(process.env.PORT ?? 4100);
 const COOLDOWN_MS = Number(process.env.RUN_COOLDOWN_MS ?? 15_000);
 const MAX_RUNS_PER_HOUR = Number(process.env.MAX_RUNS_PER_HOUR ?? 40);
-const html = fs.readFileSync(path.resolve('src/monad/dashboard.html'), 'utf8');
+const HTML_PATH = path.resolve('src/monad/dashboard.html');
 
 let running = false;
 let lastRunAt = 0;
@@ -19,7 +19,7 @@ let runTimes: number[] = [];
 let lastRun: (RunResult & { at: string }) | null = null;
 
 const app = express();
-app.get('/', (_req, res) => res.type('html').send(html));
+app.get('/', (_req, res) => res.type('html').send(fs.readFileSync(HTML_PATH, 'utf8')));
 
 // Public passthrough to the agents, so external x402 clients can pay them through this one URL:
 // e.g. GET /agents/analyst/risk/0x… returns the analyst's 402 quote, and the retry with X-PAYMENT settles.
